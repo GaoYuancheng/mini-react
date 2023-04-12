@@ -24,4 +24,19 @@ const element = (
   </div>
 );
 
+const element1 = (
+  <div id="1">
+    <div id="1-1">
+      <a id="1-1-1">bars111</a>
+      <a id="1-1-2">bars112</a>
+    </div>
+    <a />
+  </div>
+);
+
 ReactDom.render(element, document.getElementById("root"));
+
+setTimeout(() => {
+  ReactDom.render(element1, document.getElementById("root"));
+  console.log("window.requestIdleCallback", window.requestIdleCallback);
+}, 3000);

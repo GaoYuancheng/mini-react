@@ -1,5 +1,7 @@
 // react/react-dom.js
 
+// 需要删除的节点
+let deletions = null;
 // 下一个功能单元 fiber节点
 let nextUnitOfWork = null;
 // 下一轮更新的fiberTree
@@ -17,7 +19,7 @@ const isProperty = (key) => key !== "children";
 function workLoop(deadline) {
   // 停止循环标识
   let shouldYield = false;
-
+  console.log("workss", wipFiberTree);
   // 循环条件为存在下一个工作单元，且没有更高优先级的工作
   while (nextUnitOfWork && !shouldYield) {
     console.log("workLoop", deadline, deadline.timeRemaining(), nextUnitOfWork);
@@ -32,8 +34,8 @@ function workLoop(deadline) {
     commitRoot();
     return;
   }
-  // 空闲时间应该任务
   requestIdleCallback(workLoop);
+  // 空闲时间应该任务
 }
 
 requestIdleCallback(workLoop);
@@ -41,11 +43,22 @@ requestIdleCallback(workLoop);
 // 将生成的 fiber树渲染到页面上面
 function commitRoot() {
   console.log("wipFiberTree", wipFiberTree);
+  // deletions.forEach(commitWork)
+  // 遍历删除旧节点
   function commitUnit(fiber) {
     // 获取父节点的 dom
     if (fiber.parent) {
       const parentDom = fiber.parent.dom;
+
+      // if (fiber.effectTag === "PLACEMENT") {
+      // 新增
       parentDom.appendChild(fiber.dom);
+      // } else if (fiber.effectTag === "DELETION") {
+      //   // 删除
+      //   parentDom.removeChild(fiber.dom);
+      // } else if (fiber.effectTag === "UPDATE") {
+      //   // 更新
+      // }
     }
     if (fiber.child) {
       commitUnit(fiber.child);
@@ -61,38 +74,83 @@ function commitRoot() {
 }
 
 /**
- * 协调
- * @param {*} wipFiber
- * @param {*} elements
+ * 协调 构建和 currentRoot 对比结果之后的 wipFiber
+ * @param {*} wipFiber //  fiber
+ * @param {*} fiberList // fiber.child
  */
-function reconcileChildren(fiber, fiberList) {
+function reconcileChildren(wipFiber, fiberList) {
   // 索引
   let index = 0;
   // 上一个兄弟节点
   let prevSibling = null;
 
-  // 遍历孩子节点
-  while (index < fiberList.length) {
+  // 上一次渲染的fiber
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
+
+  // 遍历孩子节点  第一次render的 oldFiber 是 null
+  while (index < fiberList.length || oldFiber != null) {
     const fiberChild = fiberList[index];
     // 创建fiber
-    const newFiberChild = {
-      type: fiberChild.type,
-      props: fiberChild.props,
-      parent: fiber,
-      dom: null,
-    };
+    // const newFiberChild = {
+    //   type: fiberChild.type,
+    //   props: fiberChild.props,
+    //   parent: wipFiber,
+    //   dom: null,
+    // };
+
+    let newFiber = null;
+
+    // 类型判断 全部都存在的情况  type  div/a/span...
+    const sameType = oldFiber && fiberChild && fiberChild.type == oldFiber.type;
+
+    // 类型相同需要更新
+    if (sameType) {
+      newFiber = {
+        type: oldFiber.type,
+        props: fiberChild.props,
+        dom: oldFiber.dom,
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: "UPDATE",
+      };
+    }
+
+    // 新的存在并且类型和老的不同需要 新增
+    if (fiberChild && !sameType) {
+      //  add this node
+      newFiber = {
+        type: fiberChild.type,
+        props: fiberChild.props,
+        dom: null, // fiberChild.dom 就是 undefined
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: "PLACEMENT",
+      };
+    }
+
+    // 老的存在并且类型和新的不同需要 移除
+    if (oldFiber && !sameType) {
+      // delete the oldFiber's node
+      oldFiber.effectTag = "DELETION";
+      deletions.push(oldFiber);
+    }
+
+    // 处理老fiber的兄弟节点
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
 
     // 将第一个孩子节点设置为 fiber 的子节点
     if (index === 0) {
-      fiber.child = newFiberChild;
+      wipFiber.child = newFiber;
     }
 
     if (index > 0 && fiberChild) {
       // 第一个之外的子节点设置为第一个子节点的兄弟节点
-      prevSibling.sibling = newFiberChild;
+      prevSibling.sibling = newFiber;
     }
 
-    prevSibling = newFiberChild;
+    prevSibling = newFiber;
     index++;
   }
 }
@@ -115,6 +173,7 @@ function performUnitOfWork(fiber) {
   // 获取到当前fiber的孩子节点
   const fiberChildren = fiber.props.children;
 
+  // 构造 fiber.child fiber.sibling
   reconcileChildren(fiber, fiberChildren);
 
   // ------返回下一个工作单元
@@ -142,7 +201,7 @@ function performUnitOfWork(fiber) {
  */
 function render(element, container) {
   console.log("container", container);
-
+  deletions = [];
   // 将根节点设置为第一个将要工作单元
   nextUnitOfWork = wipFiberTree = {
     dom: container,
