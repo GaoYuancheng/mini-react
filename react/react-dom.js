@@ -10,7 +10,13 @@ let wipFiberTree = null;
 // 更新前的根节点fiber树
 let currentRoot = null;
 
-const isProperty = (key) => key !== "children";
+// 是否为事件监听
+const isEvent = (key) => key.startsWith("on");
+const isProperty = (key) => key !== "children" && !isEvent(key);
+// 是否有新属性
+const isNew = (prev, next) => (key) => prev[key] !== next[key];
+// 是否是旧属性
+const isGone = (prev, next) => (key) => !(key in next);
 
 /**
  * 工作循环
@@ -19,7 +25,7 @@ const isProperty = (key) => key !== "children";
 function workLoop(deadline) {
   // 停止循环标识
   let shouldYield = false;
-  console.log("workss", wipFiberTree);
+
   // 循环条件为存在下一个工作单元，且没有更高优先级的工作
   while (nextUnitOfWork && !shouldYield) {
     console.log("workLoop", deadline, deadline.timeRemaining(), nextUnitOfWork);
@@ -32,7 +38,7 @@ function workLoop(deadline) {
   if (!nextUnitOfWork && wipFiberTree) {
     // 渲染到页面上
     commitRoot();
-    return;
+    // return;
   }
   requestIdleCallback(workLoop);
   // 空闲时间应该任务
@@ -40,26 +46,74 @@ function workLoop(deadline) {
 
 requestIdleCallback(workLoop);
 
+/**
+ * 更新dom属性
+ * @param {*} dom
+ * @param {*} prevProps 老属性
+ * @param {*} nextProps 新属性
+ */
+function updateDom(dom, prevProps, nextProps) {
+  // 移除老的事件监听
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => !(key in nextProps) || isNew(prevProps, nextProps)(key))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.removeEventListener(eventType, prevProps[name]);
+    });
+
+  // 添加新的事件处理
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.addEventListener(eventType, nextProps[name]);
+    });
+
+  // 移除老的属性
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, nextProps))
+    .forEach((name) => {
+      dom[name] = "";
+    });
+
+  // 设置新的属性
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      dom[name] = nextProps[name];
+    });
+}
+
 // 将生成的 fiber树渲染到页面上面
 function commitRoot() {
-  console.log("wipFiberTree", wipFiberTree);
-  // deletions.forEach(commitWork)
+  console.log("wipFiberTree", wipFiberTree, currentRoot, deletions);
+  deletions.forEach(commitUnit);
   // 遍历删除旧节点
   function commitUnit(fiber) {
+    console.log("commitUnit fiber", fiber);
     // 获取父节点的 dom
     if (fiber.parent) {
       const parentDom = fiber.parent.dom;
 
-      // if (fiber.effectTag === "PLACEMENT") {
-      // 新增
-      parentDom.appendChild(fiber.dom);
-      // } else if (fiber.effectTag === "DELETION") {
-      //   // 删除
-      //   parentDom.removeChild(fiber.dom);
-      // } else if (fiber.effectTag === "UPDATE") {
-      //   // 更新
-      // }
+      if (fiber.effectTag === "PLACEMENT") {
+        // 新增
+        parentDom.appendChild(fiber.dom);
+      } else if (fiber.effectTag === "DELETION") {
+        // 删除
+        parentDom.removeChild(fiber.dom);
+        return;
+      }
     }
+
+    if (fiber.effectTag === "UPDATE") {
+      // 更新
+      updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+    }
+
     if (fiber.child) {
       commitUnit(fiber.child);
     }
@@ -74,9 +128,9 @@ function commitRoot() {
 }
 
 /**
- * 协调 构建和 currentRoot 对比结果之后的 wipFiber
- * @param {*} wipFiber //  fiber
- * @param {*} fiberList // fiber.child
+ * 协调
+ * @param {*} wipFiber
+ * @param {*} elements
  */
 function reconcileChildren(wipFiber, fiberList) {
   // 索引
@@ -164,16 +218,15 @@ function performUnitOfWork(fiber) {
   }
 
   // 如果fiber有父节点，将fiber.dom添加到父节点
-  if (fiber.parent) {
-    fiber.parent.dom.appendChild(fiber.dom);
-  }
+  // if (fiber.parent) {
+  //   fiber.parent.dom.appendChild(fiber.dom);
+  // }
 
   // ---- 构建fiber节点
 
   // 获取到当前fiber的孩子节点
   const fiberChildren = fiber.props.children;
 
-  // 构造 fiber.child fiber.sibling
   reconcileChildren(fiber, fiberChildren);
 
   // ------返回下一个工作单元
@@ -228,12 +281,8 @@ const createDom = (fiber) => {
   } else {
     dom = document.createElement(element.type);
   }
-  // 为节点绑定属性
-  Object.keys(element.props)
-    .filter(isProperty)
-    .forEach((name) => {
-      dom[name] = element.props[name];
-    });
+
+  updateDom(dom, {}, element.props);
 
   return dom;
 };
