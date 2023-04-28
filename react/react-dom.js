@@ -88,30 +88,50 @@ function updateDom(dom, prevProps, nextProps) {
     });
 }
 
+/**
+ * 删除情况下，不断的向下找，直到找到有dom的子节点
+ * @param {*} fiber
+ * @param {*} domParent
+ */
+function commitDeletion(fiber, domParent) {
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom);
+  } else {
+    commitDeletion(fiber.child, domParent);
+  }
+}
+
 // 将生成的 fiber树渲染到页面上面
 function commitRoot() {
   console.log("wipFiberTree", wipFiberTree, currentRoot, deletions);
-  deletions.forEach(commitUnit);
+  // deletions.forEach(commitUnit);
   // 遍历删除旧节点
   function commitUnit(fiber) {
     console.log("commitUnit fiber", fiber);
-    // 获取父节点的 dom
-    if (fiber.parent) {
-      const parentDom = fiber.parent.dom;
+    if (!fiber) return;
 
-      if (fiber.effectTag === "PLACEMENT") {
-        // 新增
-        parentDom.appendChild(fiber.dom);
-      } else if (fiber.effectTag === "DELETION") {
-        // 删除
-        parentDom.removeChild(fiber.dom);
-        return;
-      }
+    let domParentFiber = fiber.parent;
+    // if (!domParentFiber) return;
+    // 一直向上找，直到找到有dom的节点
+    while (!domParentFiber.dom) {
+      domParentFiber = domParentFiber.parent;
     }
 
-    if (fiber.effectTag === "UPDATE") {
-      // 更新
-      updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+    const domParent = domParentFiber.dom;
+
+    // 获取父节点的 dom
+    if (fiber.dom && domParent) {
+      if (fiber.effectTag === "PLACEMENT") {
+        // 新增
+        domParent.appendChild(fiber.dom);
+      } else if (fiber.effectTag === "DELETION") {
+        // 删除
+        commitDeletion(fiber, domParent);
+        return;
+      } else if (fiber.effectTag === "UPDATE") {
+        // 更新
+        updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+      }
     }
 
     if (fiber.child) {
@@ -122,7 +142,7 @@ function commitRoot() {
     }
   }
 
-  commitUnit(wipFiberTree);
+  commitUnit(wipFiberTree.child);
   currentRoot = wipFiberTree;
   wipFiberTree = null;
 }
@@ -209,25 +229,37 @@ function reconcileChildren(wipFiber, fiberList) {
   }
 }
 
-// 执行单元事件，返回下一个单元事件
-function performUnitOfWork(fiber) {
+function updateFunctionComponent(fiber) {
+  // 处理函数组件
+  const children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
+}
+
+function updateHostComponent(fiber) {
+  // 处理普通节点
+  // ---- 构建fiber节点
   // debugger;
   // 如果fiber上没有dom节点，为其创建一个
   if (!fiber.dom) {
     fiber.dom = createDom(fiber);
   }
-
-  // 如果fiber有父节点，将fiber.dom添加到父节点
-  // if (fiber.parent) {
-  //   fiber.parent.dom.appendChild(fiber.dom);
-  // }
-
-  // ---- 构建fiber节点
-
   // 获取到当前fiber的孩子节点
   const fiberChildren = fiber.props.children;
 
   reconcileChildren(fiber, fiberChildren);
+}
+
+// 执行单元事件，返回下一个单元事件
+function performUnitOfWork(fiber) {
+  // 判断是否为函数
+  const isFunctionComponent = fiber.type instanceof Function;
+
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    // 更新普通节点
+    updateHostComponent(fiber);
+  }
 
   // ------返回下一个工作单元
 

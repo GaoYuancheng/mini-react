@@ -13,19 +13,19 @@ import { longTimeScript } from "../script";
 //   }
 // })();
 
-const element = (
-  <div id="1">
-    <div id="1-1">
-      <a id="1-1-1">bar111</a>
-      <a id="1-1-2">bar112</a>
-    </div>
-    <div id="1-2">
-      <a id="1-2-1">bar121</a>
-      <a id="1-2-2">bar122</a>
-    </div>
-    <b />
-  </div>
-);
+// const element = (
+//   <div id="1">
+//     <div id="1-1">
+//       <a id="1-1-1">bar111</a>
+//       <a id="1-1-2">bar112</a>
+//     </div>
+//     <div id="1-2">
+//       <a id="1-2-1">bar121</a>
+//       <a id="1-2-2">bar122</a>
+//     </div>
+//     <b />
+//   </div>
+// );
 
 const element1 = (
   <div id="1">
@@ -48,14 +48,19 @@ const element1 = (
 );
 
 function App(props) {
-  return <h1>H1,{props.name}!</h1>;
+  // const [state, setState] = React.useState(1);
+  return (
+    <div>
+      <h1>Count: 1</h1>
+      {/* <button onClick={() => setState((c) => c + 1)}>+1</button> */}
+    </div>
+  );
 }
 
 ReactDom.render(<App name="foo"></App>, document.getElementById("root"));
 
 // ReactDom.render(element, document.getElementById("root"));
 
-// setTimeout(() => {
-//   ReactDom.render(element1, document.getElementById("root"));
-//   console.log("window.requestIdleCallback", window.requestIdleCallback);
-// }, 3000);
+setTimeout(() => {
+  ReactDom.render(element1, document.getElementById("root"));
+}, 3000);
